@@ -16,15 +16,16 @@
   const _false = 'false';
   const attr = currentScript.getAttribute.bind(currentScript);
   const website = attr(_data + 'website-id');
-  const hostUrl = attr(_data + 'host-url');
+  // const hostUrl = attr(_data + 'host-url');
   const autoTrack = attr(_data + 'auto-track') !== _false;
   const dnt = attr(_data + 'do-not-track');
   const domain = attr(_data + 'domains') || '';
   const domains = domain.split(',').map(n => n.trim());
-  const root = hostUrl
-    ? hostUrl.replace(/\/$/, '')
-    : currentScript.src.split('/').slice(0, -1).join('/');
-  const endpoint = `${root}/api/send`;
+  // const root = hostUrl
+  //   ? hostUrl.replace(/\/$/, '')
+  //   : currentScript.src.split('/').slice(0, -1).join('/');
+  // const endpoint = `${root}/api/send`;
+  const endpoint = '/api/tracker';
   const screen = `${width}x${height}`;
   const eventRegex = /data-umami-event-([\w-_]+)/;
   const eventNameAttribute = _data + 'umami-event';
@@ -50,6 +51,16 @@
     }
   };
 
+  const getPayloadBaseData = () => {
+    const info = (window.__TRACKER__ && window.__TRACKER__.info) || {};
+    const result = {
+      'client-time': Date.now(),
+      'timezone-offset': new Date().getTimezoneOffset(),
+      ...(info.accountId && { 'account-id': info.accountId }),
+    };
+    return Object.keys(result).length === 0 ? undefined : result;
+  };
+
   const getPayload = () => ({
     website,
     hostname,
@@ -58,6 +69,7 @@
     title,
     url: currentUrl,
     referrer: currentRef,
+    data: getPayloadBaseData(),
   });
 
   /* Tracking functions */
@@ -92,31 +104,16 @@
   };
 
   const handleClick = () => {
-    const trackElement = el => {
-      const attr = el.getAttribute.bind(el);
-      const eventName = attr(eventNameAttribute);
-
-      if (eventName) {
-        const eventData = {};
-
-        el.getAttributeNames().forEach(name => {
-          const match = name.match(eventRegex);
-
-          if (match) {
-            eventData[match[1]] = attr(name);
-          }
-        });
-
-        return track(eventName, eventData);
+    function handleFullClick(event) {
+      function isTag(element, tagName) {
+        return element.tagName === tagName.toUpperCase();
       }
-      return Promise.resolve();
-    };
 
-    const callback = e => {
-      const findATagParent = (rootElem, maxSearchDepth) => {
-        let currentElement = rootElem;
+      function findTagParent(rootElement, tagName) {
+        const maxSearchDepth = 10;
+        let currentElement = rootElement;
         for (let i = 0; i < maxSearchDepth; i++) {
-          if (currentElement.tagName === 'A') {
+          if (isTag(currentElement, tagName)) {
             return currentElement;
           }
           currentElement = currentElement.parentElement;
@@ -125,35 +122,109 @@
           }
         }
         return null;
-      };
-
-      const el = e.target;
-      const anchor = el.tagName === 'A' ? el : findATagParent(el, 10);
-
-      if (anchor) {
-        const { href, target } = anchor;
-        const external =
-          target === '_blank' ||
-          e.ctrlKey ||
-          e.shiftKey ||
-          e.metaKey ||
-          (e.button && e.button === 1);
-        const eventName = anchor.getAttribute(eventNameAttribute);
-
-        if (eventName && href) {
-          if (!external) {
-            e.preventDefault();
-          }
-          return trackElement(anchor).then(() => {
-            if (!external) location.href = href;
-          });
-        }
-      } else {
-        trackElement(el);
       }
-    };
 
-    document.addEventListener('click', callback, true);
+      const ele = event.target;
+
+      let elementTagName;
+      let elementType;
+      let elementRole;
+      let elementId;
+      let elementName;
+      let elementTitle;
+      let elementAlt;
+      let elementClassName;
+
+      let elementContent;
+      let elementUrl;
+
+      function setElementBaseInfo(element) {
+        elementTagName = element.tagName.toUpperCase() || undefined;
+        elementType = element.type || undefined;
+        elementRole = element.role || undefined;
+        elementId = element.id || undefined;
+        elementName = element.name || undefined;
+        elementTitle = element.title || undefined;
+        elementAlt = element.alt || undefined;
+        elementClassName = element.className || undefined;
+      }
+
+      function tryMatchElement() {
+        if (isTag(ele, 'TEXTAREA')) {
+          setElementBaseInfo(ele);
+          return ele;
+        }
+
+        if (isTag(ele, 'SELECT')) {
+          setElementBaseInfo(ele);
+          try {
+            elementContent = ele
+              .querySelector('option[value="' + ele.value + '"]')
+              .innerText.trim();
+          } catch (err) {
+            //
+          }
+          return ele;
+        }
+
+        if (isTag(ele, 'INPUT')) {
+          setElementBaseInfo(ele);
+
+          const type = ele.type;
+          if (type === 'button' || type === 'reset' || type === 'submit') {
+            elementContent = ele.value;
+          }
+
+          return ele;
+        }
+
+        const anchor = findTagParent(ele, 'A');
+        if (anchor) {
+          setElementBaseInfo(anchor);
+          elementContent = anchor.innerText.trim() || undefined;
+          elementUrl = anchor.href || undefined;
+          return anchor;
+        }
+
+        const button = findTagParent(ele, 'BUTTON');
+        if (button) {
+          setElementBaseInfo(button);
+          elementContent = button.innerText.trim() || undefined;
+          return button;
+        }
+      }
+
+      function report(targetElement) {
+        const getAttr = targetElement.getAttribute.bind(targetElement);
+        const eventName = getAttr(eventNameAttribute) || 'full-click';
+        const eventData = {
+          'element-tag-name': elementTagName || undefined,
+          'element-type': elementType || undefined,
+          'element-role': elementRole || undefined,
+          'element-id': elementId || undefined,
+          'element-name': elementName || undefined,
+          'element-title': elementTitle || undefined,
+          'element-alt': elementAlt || undefined,
+          'element-class-name': elementClassName || undefined,
+          'element-content': elementContent || undefined,
+          'element-url': elementUrl || undefined,
+        };
+        targetElement.getAttributeNames().forEach(name => {
+          const match = name.match(eventRegex);
+          if (match) {
+            eventData[match[1]] = getAttr(name);
+          }
+        });
+        track(eventName, eventData);
+      }
+
+      const target = tryMatchElement();
+      if (target != null) {
+        report(target);
+      }
+    }
+
+    document.addEventListener('click', handleFullClick, true);
   };
 
   const observeTitle = () => {
@@ -194,10 +265,15 @@
 
   const track = (obj, data) => {
     if (typeof obj === 'string') {
+      const payload = getPayload();
+      const payloadData = {
+        ...(payload.data || {}),
+        ...(typeof data === 'object' ? data : {}),
+      };
       return send({
-        ...getPayload(),
+        ...payload,
         name: obj,
-        data: typeof data === 'object' ? data : undefined,
+        data: Object.keys(payloadData).length === 0 ? undefined : payloadData,
       });
     } else if (typeof obj === 'object') {
       return send(obj);
