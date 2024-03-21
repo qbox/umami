@@ -25,7 +25,7 @@
   //   ? hostUrl.replace(/\/$/, '')
   //   : currentScript.src.split('/').slice(0, -1).join('/');
   // const endpoint = `${root}/api/send`;
-  const endpoint = '/api/tracker';
+  const endpoint = '/api/portal/info/biz';
   const screen = `${width}x${height}`;
   const eventRegex = /data-umami-event-([\w-_]+)/;
   const eventNameAttribute = _data + 'umami-event';
@@ -52,11 +52,9 @@
   };
 
   const getPayloadBaseData = () => {
-    const info = (window.__TRACKER__ && window.__TRACKER__.info) || {};
     const result = {
-      'client-time': Date.now(),
-      'timezone-offset': new Date().getTimezoneOffset(),
-      ...(info.accountId && { 'account-id': info.accountId }),
+      'c-client-time': Date.now(),
+      'c-timezone-offset': new Date().getTimezoneOffset(),
     };
     return Object.keys(result).length === 0 ? undefined : result;
   };
@@ -198,16 +196,16 @@
         const getAttr = targetElement.getAttribute.bind(targetElement);
         const eventName = getAttr(eventNameAttribute) || 'full-click';
         const eventData = {
-          'element-tag-name': elementTagName || undefined,
-          'element-type': elementType || undefined,
-          'element-role': elementRole || undefined,
-          'element-id': elementId || undefined,
-          'element-name': elementName || undefined,
-          'element-title': elementTitle || undefined,
-          'element-alt': elementAlt || undefined,
-          'element-class-name': elementClassName || undefined,
-          'element-content': elementContent || undefined,
-          'element-url': elementUrl || undefined,
+          'c-element-tag-name': elementTagName || undefined,
+          'c-element-type': elementType || undefined,
+          'c-element-role': elementRole || undefined,
+          'c-element-id': elementId || undefined,
+          'c-element-name': elementName || undefined,
+          'c-element-title': elementTitle || undefined,
+          'c-element-alt': elementAlt || undefined,
+          'c-element-class-name': elementClassName || undefined,
+          'c-element-content': elementContent || undefined,
+          'c-element-url': elementUrl || undefined,
         };
         targetElement.getAttributeNames().forEach(name => {
           const match = name.match(eventRegex);
